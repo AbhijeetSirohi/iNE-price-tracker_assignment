@@ -1,0 +1,17 @@
+*, *::before, *::after { box-sizing: border-box; }
+
+:root {
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body { margin: 0; }
+
+#root { min-height: 100svh; }
+
+h1, h2, h3, h4 { margin: 0; font-weight: 600; }
+p { margin: 0; }
+button { font-family: inherit; }
