@@ -3,6 +3,12 @@
 const { runPriceScraperJob } = require('../jobs/priceScraperJob');
 
 /**
+ * In-memory guard — true while a scraper job is in flight.
+ * Prevents overlapping runs when cron-job.org fires concurrent requests.
+ */
+let jobRunning = false;
+
+/**
  * POST /api/jobs/run-scraper
  *
  * Triggers the price scraper job immediately.
@@ -14,8 +20,11 @@ const { runPriceScraperJob } = require('../jobs/priceScraperJob');
  *   Requires header  X-Cron-Secret: <value of CRON_SECRET env var>
  *   If CRON_SECRET is not set the endpoint is disabled entirely (returns 503)
  *   so a misconfigured production deploy fails loudly rather than silently open.
+ *
+ * The job is started asynchronously so the HTTP response is returned immediately
+ * (within the 30-second timeout imposed by cron-job.org).
  */
-exports.runScraperJob = async (req, res) => {
+exports.runScraperJob = (req, res) => {
   const cronSecret = process.env.CRON_SECRET;
 
   // Hard-fail if the secret is not configured — prevents accidental open access.
@@ -34,12 +43,27 @@ exports.runScraperJob = async (req, res) => {
     return res.status(401).json({ error: 'Unauthorized: invalid or missing X-Cron-Secret header.' });
   }
 
-  try {
-    console.log('[JOB-CTRL] Authorized trigger received via POST /api/jobs/run-scraper');
-    const summary = await runPriceScraperJob();
-    res.json({ message: 'Job completed', summary });
-  } catch (error) {
-    console.error('[JOB-CTRL] Job failed with unexpected error:', error.message);
-    res.status(500).json({ error: error.message });
+  // Prevent overlapping runs.
+  if (jobRunning) {
+    console.warn('[JOB-CTRL] Job already running — rejecting duplicate trigger.');
+    return res.status(409).json({ error: 'A scraper job is already running.' });
   }
+
+  // Mark as running and fire off the job without awaiting it.
+  jobRunning = true;
+  console.log('[JOB-CTRL] Authorized trigger received — starting scraper job in background.');
+
+  runPriceScraperJob()
+    .then((summary) => {
+      console.log('[JOB-CTRL] Background scraper job completed.', summary);
+    })
+    .catch((error) => {
+      console.error('[JOB-CTRL] Background scraper job failed:', error.message);
+    })
+    .finally(() => {
+      jobRunning = false;
+    });
+
+  // Respond immediately — well within the 30-second cron-job.org timeout.
+  return res.status(202).json({ message: 'Scraper job started' });
 };
