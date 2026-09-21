@@ -65,5 +65,5 @@ exports.runScraperJob = (req, res) => {
     });
 
   // Respond immediately — well within the 30-second cron-job.org timeout.
-  return res.status(202).json({ message: 'Scraper job started' });
+  return res.status(202).json({ success: true, message: 'Scraper job started' });
 };
